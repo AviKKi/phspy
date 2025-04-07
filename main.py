@@ -1,3 +1,4 @@
+# this is old main.py 
 import argparse
 from utils import generate_date_range
 from utils import ProductHuntClient, get_products_on_date
@@ -35,6 +36,8 @@ def main():
                 print(f"Topics: {product['topics']}")
                 print(f"Product URL: {product['product_url']}")
                 print('-' * 50)
+
+                
             print(f'Total products retrieved for {date}: {len(products)}\n')
         else:
             print(f'No products found for {date}.\n')
