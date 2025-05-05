@@ -4,3 +4,9 @@ __pycache__/
 
 # macOS system files
 .DS_Store
+
+# Virtual environment
+venv/
+
+# pytest cache
+.pytest_cache/

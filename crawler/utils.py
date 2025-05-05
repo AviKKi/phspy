@@ -1,10 +1,17 @@
 import requests
+import argparse
 import logging
 import re
 from time import sleep
 from datetime import datetime, timedelta
 
 logging.basicConfig(level = logging.INFO, format = "%(asctime)s - %(levelname)s - %(message)s")
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Product Hunt Crawler')
+    parser.add_argument('--start_date', required=True, help='Start date in YYYY-MM-DD format')
+    parser.add_argument('--end_date', required=True, help='End date in YYYY-MM-DD format')
+    return parser.parse_args()
 
 def generate_date_range(start_date: str, end_date: str):
     try:
@@ -23,10 +30,27 @@ class ProductHuntClient:
     BASE_URL = 'https://www.producthunt.com/frontend/graphql'
 
     def __init__(self, max_tries=3, timeout=10):
+        # self.headers = {
+        #     'Content-Type': 'application/json',
+        #     'Referer': 'https://www.producthunt.com/',
+        #     "Origin": "https://www.producthunt.com",
+        #     # 'User-Agent': 'Mozilla/5.0'
+        #     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
+        # }
         self.headers = {
-            'Content-Type': 'application/json',
-            'Referer': 'https://www.producthunt.com/',
-            'User-Agent': 'Mozilla/5.0'
+            'accept': '/',
+            'accept-language': 'en-US,en;q=0.9',
+            'cache-control': 'no-cache',
+            'content-type': 'application/json',
+            'pragma': 'no-cache',
+            'priority': 'u=1, i',
+            'referer': 'https://www.producthunt.com/',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            'x-ph-referer': '',
+            'x-ph-timezone': 'Asia/Calcutta',
+            'x-requested-with': 'XMLHttpRequest',
         }
         self.max_tries = max_tries
         self.timeout = timeout
@@ -35,6 +59,7 @@ class ProductHuntClient:
         for attempt in range(self.max_tries):
             try:
                 response = requests.post(self.BASE_URL, headers = self.headers, json = payload, timeout = self.timeout)
+                sleep(2)
 
                 if response.status_code == 200:
                     logging.info('Request successful')
@@ -88,14 +113,21 @@ def get_products_on_date(client, year, month, day):
             node = product.get('node', {})
             if node.get('__typename') == 'Ad':
                 continue
+            
+            redirect_to_product = node.get('redirectToProduct')
+            slug = redirect_to_product.get('slug') if redirect_to_product else node.get('slug')
             all_products.append({
-                'name': node.get('name'),
-                'slug': node.get('slug'),
-                'tagline': node.get('tagline'),
+                # 'name': node.get('name'),
+                'slug': slug,
+                # 'tagline': node.get('tagline'),
                 'votes': node.get('votesCount'),
                 'launch_date': node.get('createdAt'),
                 'topics': [topic['node']['name'] for topic in node.get('topics', {}).get('edges', [])],
-                'product_url': f"https://www.producthunt.com/{node.get('shortenedUrl')}"
+                'product_url': f"https://www.producthunt.com/{node.get('shortenedUrl')}",
+                'comments_count': node.get('commentsCount'),
+                'product_id_on_PH': node.get('id'),
+                'latest_score': node.get('latestScore'),
+                'launch_day_score': node.get('launchDayScore')
             })
 
         page_info = homefeed.get('pageInfo', {})
@@ -115,31 +147,39 @@ def get_product_details(client, slug):
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "159f1cff8868f1f6afd4de0f40338d6ab826bd8bf51d6305ce0ddf3b23ad3e9a",
+                "sha256Hash": "0bc0a15a95f37395ab7e2a7df5c8f96f85d8dd5fafa63c8679b053096c967eba",
             }
         },
     }
-
+    print(f" collecting data for {slug}")
     data = client.post(payload)
+    # print(f"Raw data for {slug}: {data}")
     if not data:
         return {}
 
     product = data.get("data", {}).get("product", {})
+    print(f" data collected for {slug}")
+    # print("DEBUG: product raw data:", data)
     return {
         "id": product.get("id"),
+        "slug": product.get("slug"),
         "name": product.get("name"),
         "tagline": product.get("tagline"),
-        "reviews_count": product.get("reviewsCount"),
-        "reviews_rating": product.get("reviewsRating"),
+        # "reviews_count": product.get("reviewsCount"),
+        # "reviews_rating": product.get("reviewsRating"),
         "followers_count": product.get("followersCount"),
         "website_url": product.get("websiteUrl"),
-        "product_url": product.get("url"),
+        "product_url_on_PH": product.get("url"),
         "github": product.get("githubUrl"),
         "twitter": product.get("twitterUrl"),
         "linkedin": product.get("linkedinUrl"),
         "instagram": product.get("instagramUrl"),
         "facebook": product.get("facebookUrl"),
         "angellist": product.get("angellistUrl"),
+        "android_url": product.get("androidUrl"),
+        "clean_url": product.get("cleanUrl"),
+        "ios_url": product.get("iosUrl"),
+        "medium_url": product.get("mediumUrl"),
         "badges_count": product.get("badges", {}).get("totalCount", 0),
         "makers": [maker["node"]["name"] for maker in product.get("makers", {}).get("edges", [])],
     }
@@ -162,7 +202,7 @@ def get_product_comments(client, slug):
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "30f2a3c9af5dce9b7e8cbe7b8ad23bd4bc6eda38a9d69a88e247e6c1efd08442",
+                "sha256Hash": "a3fe1abceecfe7e57d669246ae95b88483d50b9ff511359fc6bea2670b019677",
             }
         },
     }
@@ -178,11 +218,12 @@ def get_product_comments(client, slug):
         node = comment.get("node", {})
         if node.get("isSticky") and "maker" in node.get("badges", []):
             body = re.sub(r'<a [^>]*href="([^"]+)"[^>]*>([^<]+)</a>', r'\1', node["body"])
-            extracted_comments.append({
-                "user": node["user"]["name"],
-                "username": node["user"]["username"],
-                "comment": body,
-                "url": node["url"],
+            extracted_comments.append( {
+                "slug": slug,
+                "main_comment_by_user": node["user"]["name"],
+                "main_comment_username": node["user"]["username"],
+                "main_comment": body,
+                "main_comment_url": node["url"],
             })
     
     return extracted_comments
@@ -196,7 +237,7 @@ def get_product_about(client, slug):
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "c7495797778b271a67f42cc2709ed506dea300938c11173729e5266432732643",
+                "sha256Hash": "a5175e257a694ebba472b4fa5a570e308e808b05fd65d6279bccc49012a888fe",
             }
         },
     }
@@ -207,9 +248,9 @@ def get_product_about(client, slug):
 
     product = data.get("data", {}).get("product", {})
     return {
-        "id": product.get("id"),
+        # "id": product.get("id"),
         "slug": product.get("slug"),
-        "name": product.get("name"),
+        # "name": product.get("name"),
         "description": product.get("description"),
         "reviews_count": product.get("reviewsCount"),
         "reviews_rating": product.get("reviewsRating"),
@@ -217,18 +258,20 @@ def get_product_about(client, slug):
         "posts_count": product.get("postsCount"),
         # "categories": [category["node"]["name"] for category in product.get("categories", {}).get("edges", [])],
         "categories": [category["title"] for category in product.get("categories", []) if isinstance(category, dict)],
+        "post_names": [post["node"]["name"] for post in product.get("posts", {}).get("edges", [])],
+        "post_slugs": [post["node"]["slug"] for post in product.get("posts", {}).get("edges", [])]
 
     }
 
 
-def get_full_product_info(client, slug):
-    """Wrapper function to merge all product details, comments, and about info."""
-    product_details = get_product_details(client, slug)
-    product_comments = get_product_comments(client, slug)
-    product_about = get_product_about(client, slug)
+# def get_full_product_info(client, slug):
+#     """Wrapper function to merge all product details, comments, and about info."""
+#     product_details = get_product_details(client, slug)
+#     product_comments = get_product_comments(client, slug)
+#     product_about = get_product_about(client, slug)
 
-    return {
-        "product_details": product_details,
-        "product_comments": product_comments,
-        "product_about": product_about,
-    }
+#     return {
+#         "product_details": product_details,
+#         "product_comments": product_comments,
+#         "product_about": product_about,
+#     }
