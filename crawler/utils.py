@@ -4,6 +4,7 @@ import logging
 import re
 from time import sleep
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 
 logging.basicConfig(level = logging.INFO, format = "%(asctime)s - %(levelname)s - %(message)s")
 
@@ -96,7 +97,7 @@ def get_products_on_date(client, year, month, day):
             'extensions': {
                 'persistedQuery': {
                     'version': 1,
-                    'sha256Hash': '026278149fa3f7dc43d81a35bda839586fbebf2d7206023cb31ea1d501f6e3d5'
+                    'sha256Hash': 'ce32fb1aebe25a692312819733730b73176df680396413607ae6811f446850c9'
                 }
             }
         }
@@ -117,9 +118,8 @@ def get_products_on_date(client, year, month, day):
             redirect_to_product = node.get('redirectToProduct')
             slug = redirect_to_product.get('slug') if redirect_to_product else node.get('slug')
             all_products.append({
-                # 'name': node.get('name'),
+                'name': node.get('name'),
                 'slug': slug,
-                # 'tagline': node.get('tagline'),
                 'votes': node.get('votesCount'),
                 'launch_date': node.get('createdAt'),
                 'topics': [topic['node']['name'] for topic in node.get('topics', {}).get('edges', [])],
